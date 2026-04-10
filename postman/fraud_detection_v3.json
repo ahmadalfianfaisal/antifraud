@@ -40,6 +40,24 @@
 					"}"
 				]
 			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"try {",
+					"    const res = pm.response.json();",
+					"    if (res.docs && Array.isArray(res.docs)) {",
+					"        const cleaned = res.docs.map(d => d.doc._source);",
+					"        console.log(JSON.stringify(cleaned, null, 2));",
+					"        pm.visualizer.set('<pre>{{body}}</pre>', { body: JSON.stringify(cleaned, null, 2) });",
+					"    }",
+					"} catch (e) {",
+					"    console.warn('post-response flatten skipped:', e.message);",
+					"}"
+				]
+			}
 		}
 	],
 	"item": [
