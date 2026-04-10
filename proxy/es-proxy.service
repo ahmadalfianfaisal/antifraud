@@ -1,0 +1,18 @@
+[Unit]
+Description=Elasticsearch Simulate Proxy (wrap/unwrap _source)
+After=network.target elasticsearch.service
+
+[Service]
+Type=simple
+User=root
+Environment=ES_BACKEND=https://184.169.41.143:9200
+Environment=ES_USER=elastic
+Environment=ES_PASS=p@ssw0rd
+Environment=PROXY_PORT=9200
+WorkingDirectory=/opt/es-proxy
+ExecStart=/usr/bin/python3 /opt/es-proxy/es_proxy.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
