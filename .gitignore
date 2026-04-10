@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.claude/
+.qodo/
+archive/
+.env
+!.env.example
+venv/
+.venv/
+.DS_Store

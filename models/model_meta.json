@@ -1,0 +1,12 @@
+{
+  "model_id": "fraud_unsupervised_bifast",
+  "algorithm": "IsolationForest",
+  "contamination": 0.05,
+  "score_normalization": "neg_score min-max -> [0,1]",
+  "threshold_percentile": 95,
+  "threshold": 0.683755287095426,
+  "n_train": 2006,
+  "n_outliers": 101,
+  "raw_min": -0.6210603140806884,
+  "raw_max": -0.3304314157729177
+}

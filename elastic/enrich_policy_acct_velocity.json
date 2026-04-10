@@ -1,0 +1,17 @@
+{
+  "match": {
+    "indices": "acct-velocity-snapshot",
+    "match_field": "sourceAccount",
+    "enrich_fields": [
+      "amt_sum_2min",
+      "amt_sum_5min",
+      "amt_sum_1h",
+      "amt_sum_1d",
+      "tx_count_5min",
+      "tx_count_1h",
+      "distinct_device_5min",
+      "distinct_ip_5min",
+      "distinct_location_5min"
+    ]
+  }
+}

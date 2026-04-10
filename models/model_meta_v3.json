@@ -1,0 +1,35 @@
+{
+  "model_id": "fraud_unsupervised_bifast_v3",
+  "algorithm": "IsolationForest",
+  "feature_set": "v3 (base + velocity aggregations)",
+  "contamination": 0.05,
+  "score_normalization": "neg_score min-max -> [0,1]",
+  "threshold": 0.6184259705500809,
+  "threshold_high": 0.7309104134367547,
+  "threshold_calibration": {
+    "threshold": 0.0036954216019210585,
+    "method": "f1_max_vs_garda_rules",
+    "f1": 0.5942080800853885,
+    "precision": 0.42268565615462866,
+    "recall": 1.0,
+    "n_pos_label": 831
+  },
+  "bands": {
+    "HIGH": ">= 0.7309  (auto-block)",
+    "MEDIUM": ">= 0.6184 and < 0.7309  (review / step-up)",
+    "LOW": "< 0.6184  (pass)"
+  },
+  "n_train": 2006,
+  "n_outliers_med": 201,
+  "n_outliers_high": 41,
+  "raw_min": -0.6210603140806884,
+  "raw_max": -0.3304314157729177,
+  "rules_used": {
+    "amt_sum_2min>=": 350000000,
+    "amt_sum_5min>=": 100000000,
+    "amt_sum_1d>=": 150000000,
+    "tx_count_5min>=": 3,
+    "tx_count_1h>=": 51,
+    "distinct_*_5min>=": 2
+  }
+}

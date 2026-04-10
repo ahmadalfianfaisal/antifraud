@@ -1,0 +1,198 @@
+{
+	"info": {
+		"_postman_id": "c3d4e5f6-a7b8-4c9d-0e1f-3456789012cd",
+		"name": "BI-FAST Fraud Detection V3",
+		"description": "End-to-end flow:\n\n1. Postman mengirim payload 23 field flat ke endpoint Elasticsearch `_ingest/pipeline/fraud_unsupervised_pipeline_v3_enriched/_simulate`.\n2. ES enrich processor lookup velocity aggregation per `sourceAccount` dari index snapshot `acct-velocity-snapshot` (di-update oleh continuous transform `acct_velocity_agg` dari index sumber `garda-context-bifast_trx`).\n3. Hasil enrich (amt_sum_2min/5min/1h/1d, tx_count_5min/1h, distinct_device/ip/location_5min) di-merge ke payload, lalu engineered feature di-generate (log_amount, fee_ratio, cross_bank, dst).\n4. Numeric scaling + one-hot encoding dijalankan via Painless script.\n5. Inference processor memanggil trained model `fraud_unsupervised_bifast_v3` (RandomForest surrogate dari IsolationForest).\n6. Band assignment script men-set `ml.is_anomaly`, `ml.outlier_score`, dan `ml.band` (LOW / MEDIUM / HIGH).\n\nThreshold:\n- MEDIUM = 0.6184259705500809\n- HIGH   = 0.7309104134367547\n\nAsal threshold:\nDikalibrasi saat training model v3 (lihat `models/model_meta_v3.json`). Skor mentah IsolationForest dinormalisasi min-max ke rentang [0,1]. Threshold dipilih dari distribusi skor 2006 transaksi training menggunakan metode `f1_max_vs_garda_rules` — yaitu memilih cutoff yang memaksimalkan F1 score terhadap label rule-based Garda. MEDIUM menandai ~10% transaksi paling anomali (201 dari 2006), HIGH menandai ~2% paling anomali (41 dari 2006).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{ "key": "username", "value": "{{esUser}}", "type": "string" },
+			{ "key": "password", "value": "{{esPass}}", "type": "string" }
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"try {",
+					"    const raw = pm.request.body && pm.request.body.raw;",
+					"    if (!raw) return;",
+					"    const resolved = pm.variables.replaceIn(raw);",
+					"    const parsed = JSON.parse(resolved);",
+					"    if (!parsed || !Array.isArray(parsed.docs)) return;",
+					"    let mutated = false;",
+					"    parsed.docs = parsed.docs.map(d => {",
+					"        if (d && typeof d === 'object' && !d._source) {",
+					"            mutated = true;",
+					"            return { _source: d };",
+					"        }",
+					"        return d;",
+					"    });",
+					"    if (mutated) {",
+					"        pm.request.body.raw = JSON.stringify(parsed);",
+					"    }",
+					"} catch (e) {",
+					"    console.warn('pre-request wrap skipped:', e.message);",
+					"}"
+				]
+			}
+		}
+	],
+	"item": [
+		{
+			"name": "Score - LOW",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json", "type": "text" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"docs\": [\n    {\n      \"bifastId\": \"20260409BDKIIDJ10100204000020\",\n      \"transactionId\": \"260409041420\",\n      \"transactionDirection\": \"ORIGIN\",\n      \"channel\": \"KOMIMOBILE\",\n      \"transactionType\": \"CT\",\n      \"sourceBic\": \"BMRIIDJA\",\n      \"sourceAccount\": \"1599747454\",\n      \"sourceAccountType\": \"SVGS\",\n      \"sourceCountryCode\": \"\",\n      \"destinationBic\": \"MEGAIDJA\",\n      \"destinationAccount\": \"419109017\",\n      \"destinationAccountType\": \"SVGS\",\n      \"destinationCountryCode\": \"\",\n      \"currency\": \"IDR\",\n      \"amount\": 15500,\n      \"fee\": 0,\n      \"chargeType\": \"D\",\n      \"chargeBearer\": \"DEBT\",\n      \"countryCode\": \"ID\",\n      \"deviceId\": \"SAMSUNG\",\n      \"ipAddress\": \"10.10.20.15\",\n      \"latitude\": -6.171771400000,\n      \"longitude\": 106.791342700000\n    }\n  ]\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{esHost}}/_ingest/pipeline/{{pipeline}}/_simulate",
+					"host": ["{{esHost}}"],
+					"path": ["_ingest", "pipeline", "{{pipeline}}", "_simulate"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Score - MEDIUM",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json", "type": "text" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"docs\": [\n    {\n      \"bifastId\": \"20260409MEDHIDS10100204000021\",\n      \"transactionId\": \"e23dbf2d-b2a4-485d-89b3-948e976b86fb\",\n      \"transactionDirection\": \"RECEIVING\",\n      \"channel\": \"BIFAST\",\n      \"transactionType\": \"CT\",\n      \"sourceBic\": \"MEDHIDS1\",\n      \"sourceAccount\": \"3000193525301\",\n      \"sourceAccountType\": \"SVGS\",\n      \"sourceCountryCode\": \"\",\n      \"destinationBic\": \"BMRIIDJA\",\n      \"destinationAccount\": \"400000002\",\n      \"destinationAccountType\": \"SVGS\",\n      \"destinationCountryCode\": \"\",\n      \"currency\": \"IDR\",\n      \"amount\": 75000000,\n      \"fee\": 0,\n      \"chargeType\": \"D\",\n      \"chargeBearer\": \"DEBT\",\n      \"countryCode\": \"0111\",\n      \"deviceId\": \"SAMSUNG\",\n      \"ipAddress\": \"10.10.20.15\",\n      \"latitude\": -6.171771400000,\n      \"longitude\": 106.791342700000\n    }\n  ]\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{esHost}}/_ingest/pipeline/{{pipeline}}/_simulate",
+					"host": ["{{esHost}}"],
+					"path": ["_ingest", "pipeline", "{{pipeline}}", "_simulate"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Score - HIGH",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json", "type": "text" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"docs\": [\n    {\n      \"bifastId\": \"20260409MEDHIDS10100204000022\",\n      \"transactionId\": \"260409041520\",\n      \"transactionDirection\": \"RECEIVING\",\n      \"channel\": \"BIFAST\",\n      \"transactionType\": \"CT\",\n      \"sourceBic\": \"MEDHIDS1\",\n      \"sourceAccount\": \"3000193525301\",\n      \"sourceAccountType\": \"SVGS\",\n      \"sourceCountryCode\": \"\",\n      \"destinationBic\": \"BMRIIDJA\",\n      \"destinationAccount\": \"400000002\",\n      \"destinationAccountType\": \"CV\",\n      \"destinationCountryCode\": \"\",\n      \"currency\": \"IDR\",\n      \"amount\": 75000000,\n      \"fee\": 0,\n      \"chargeType\": \"D\",\n      \"chargeBearer\": \"DEBT\",\n      \"countryCode\": \"0111\",\n      \"deviceId\": \"SAMSUNG\",\n      \"ipAddress\": \"10.10.20.15\",\n      \"latitude\": -6.171771400000,\n      \"longitude\": 106.791342700000\n    }\n  ]\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{esHost}}/_ingest/pipeline/{{pipeline}}/_simulate",
+					"host": ["{{esHost}}"],
+					"path": ["_ingest", "pipeline", "{{pipeline}}", "_simulate"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Score - Batch",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json", "type": "text" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"docs\": [\n    { \"bifastId\": \"BATCH-001\", \"transactionDirection\": \"ORIGIN\", \"channel\": \"KOMIMOBILE\", \"transactionType\": \"CT\", \"sourceBic\": \"BMRIIDJA\", \"sourceAccount\": \"1599747454\", \"sourceAccountType\": \"SVGS\", \"sourceCountryCode\": \"\", \"destinationBic\": \"MEGAIDJA\", \"destinationAccount\": \"419109017\", \"destinationAccountType\": \"SVGS\", \"destinationCountryCode\": \"\", \"currency\": \"IDR\", \"amount\": 15500, \"fee\": 0, \"chargeType\": \"D\", \"chargeBearer\": \"DEBT\", \"countryCode\": \"ID\", \"deviceId\": \"SAMSUNG\", \"ipAddress\": \"10.10.20.15\", \"latitude\": -6.171771400000, \"longitude\": 106.791342700000 },\n    { \"bifastId\": \"BATCH-002\", \"transactionDirection\": \"RECEIVING\", \"channel\": \"BIFAST\", \"transactionType\": \"CT\", \"sourceBic\": \"MEDHIDS1\", \"sourceAccount\": \"3000193525301\", \"sourceAccountType\": \"SVGS\", \"sourceCountryCode\": \"\", \"destinationBic\": \"BMRIIDJA\", \"destinationAccount\": \"400000002\", \"destinationAccountType\": \"SVGS\", \"destinationCountryCode\": \"\", \"currency\": \"IDR\", \"amount\": 75000000, \"fee\": 0, \"chargeType\": \"D\", \"chargeBearer\": \"DEBT\", \"countryCode\": \"0111\", \"deviceId\": \"SAMSUNG\", \"ipAddress\": \"10.10.20.15\", \"latitude\": -6.171771400000, \"longitude\": 106.791342700000 },\n    { \"bifastId\": \"BATCH-003\", \"transactionDirection\": \"RECEIVING\", \"channel\": \"BIFAST\", \"transactionType\": \"CT\", \"sourceBic\": \"MEDHIDS1\", \"sourceAccount\": \"3000193525301\", \"sourceAccountType\": \"SVGS\", \"sourceCountryCode\": \"\", \"destinationBic\": \"BMRIIDJA\", \"destinationAccount\": \"400000002\", \"destinationAccountType\": \"CV\", \"destinationCountryCode\": \"\", \"currency\": \"IDR\", \"amount\": 75000000, \"fee\": 0, \"chargeType\": \"D\", \"chargeBearer\": \"DEBT\", \"countryCode\": \"0111\", \"deviceId\": \"SAMSUNG\", \"ipAddress\": \"10.10.20.15\", \"latitude\": -6.171771400000, \"longitude\": 106.791342700000 }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{esHost}}/_ingest/pipeline/{{pipeline}}/_simulate",
+					"host": ["{{esHost}}"],
+					"path": ["_ingest", "pipeline", "{{pipeline}}", "_simulate"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Pipeline definition",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{esHost}}/_ingest/pipeline/{{pipeline}}",
+					"host": ["{{esHost}}"],
+					"path": ["_ingest", "pipeline", "{{pipeline}}"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Transform stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{esHost}}/_transform/acct_velocity_agg/_stats",
+					"host": ["{{esHost}}"],
+					"path": ["_transform", "acct_velocity_agg", "_stats"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Enrich policy",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{esHost}}/_enrich/policy/acct_velocity_policy",
+					"host": ["{{esHost}}"],
+					"path": ["_enrich", "policy", "acct_velocity_policy"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Trained model stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{esHost}}/_ml/trained_models/fraud_unsupervised_bifast_v3/_stats",
+					"host": ["{{esHost}}"],
+					"path": ["_ml", "trained_models", "fraud_unsupervised_bifast_v3", "_stats"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Velocity snapshot sample",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{esHost}}/acct-velocity-snapshot/_search?size=10",
+					"host": ["{{esHost}}"],
+					"path": ["acct-velocity-snapshot", "_search"],
+					"query": [{ "key": "size", "value": "10" }]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{ "key": "esHost", "value": "https://184.169.41.143:9200", "type": "string" },
+		{ "key": "esUser", "value": "elastic", "type": "string" },
+		{ "key": "esPass", "value": "p@ssw0rd", "type": "string" },
+		{ "key": "pipeline", "value": "fraud_unsupervised_pipeline_v3_enriched", "type": "string" }
+	]
+}
